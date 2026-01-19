@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Annual Budget Planner</title>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+    }
+    input[type="number"]::-webkit-inner-spin-button,
+    input[type="number"]::-webkit-outer-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState } = React;
+
+    // Icons
+    const Icon = ({ name, size = 20, className = "" }) => {
+      const icons = {
+        plus: "M12 5v14m-7-7h14",
+        trash: "M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16",
+        copy: "M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z",
+        chart: "M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z",
+        calculator: "M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"
+      };
+      
+      return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+          <path d={icons[name]} />
+        </svg>
+      );
+    };
+
+    // Default budget template
+    const createDefaultBudget = (name) => ({
+      id: Date.now().toString(),
+      name: name,
+      createdAt: new Date().toISOString(),
+      grossIncome: { annual: 0, monthly: 0, perPaycheck: 0, notes: '' },
+      taxes: { annual: 0, monthly: 0, perPaycheck: 0, notes: '' },
+      insurance: { annual: 0, monthly: 0, perPaycheck: 0, notes: '' },
+      savings: {
+        '401k': { annual: 0, monthly: 0, perPaycheck: 0, notes: '2026 limit is $24,500', limit: 24500 },
+        'rothIRA': { annual: 0, monthly: 0, perPaycheck: 0, notes: '2026 limit is $7,500', limit: 7500 },
+        'hsa': { annual: 0, monthly: 0, perPaycheck: 0, notes: '2026 limit is $4,400', limit: 4400 },
+        'hysa': { annual: 0, monthly: 0, perPaycheck: 0, notes: '' },
+        'brokerage': { annual: 0, monthly: 0, perPaycheck: 0, notes: '' }
+      },
+      expenses: {
+        'rent': { annual: 0, monthly: 0, perPaycheck: 0, notes: '' },
+        'living': { annual: 0, monthly: 0, perPaycheck: 0, notes: 'utilities, groceries, etc.' },
+        'travel': { annual: 0, monthly: 0, perPaycheck: 0, notes: '' },
+        'discretionary': { annual: 0, monthly: 0, perPaycheck: 0, notes: '' }
+      }
+    });
+
+    const mockBudgets = [
+      (() => {
+        const budget = createDefaultBudget('Conservative Plan');
+        budget.grossIncome = { annual: 120000, monthly: 10000, perPaycheck: 5000, notes: '' };
+        budget.taxes = { annual: 24000, monthly: 2000, perPaycheck: 1000, notes: '' };
+        budget.insurance = { annual: 6000, monthly: 500, perPaycheck: 250, notes: '' };
+        budget.savings['401k'] = { annual: 24500, monthly: 2041.67, perPaycheck: 1020.83, notes: '2026 limit is $24,500', limit: 24500 };
+        budget.savings.rothIRA = { annual: 7500, monthly: 625, perPaycheck: 312.50, notes: '2026 limit is $7,500', limit: 7500 };
+        budget.savings.hsa = { annual: 4400, monthly: 366.67, perPaycheck: 183.33, notes: '2026 limit is $4,400', limit: 4400 };
+        budget.expenses.rent = { annual: 24000, monthly: 2000, perPaycheck: 1000, notes: '' };
+        budget.expenses.living = { annual: 18000, monthly: 1500, perPaycheck: 750, notes: 'utilities, groceries, etc.' };
+        budget.expenses.travel = { annual: 6000, monthly: 500, perPaycheck: 250, notes: '' };
+        budget.expenses.discretionary = { annual: 5600, monthly: 466.67, perPaycheck: 233.33, notes: '' };
+        return budget;
+      })()
+    ];
+
+    const formatCurrency = (value) => {
+      if (!value && value !== 0) return '$0.00';
+      return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
+    };
+
+    const BudgetInput = ({ label, value, onChange, notes, limit }) => (
+      <div className="grid grid-cols-5 gap-3 items-center py-2 border-b border-gray-100">
+        <div className="col-span-1 text-sm font-medium text-gray-700">
+          {label}
+          {limit && <span className="text-xs text-gray-500 block">Limit: {formatCurrency(limit)}</span>}
+        </div>
+        <input
+          type="number"
+          value={value.annual || ''}
+          onChange={(e) => {
+            const annual = parseFloat(e.target.value) || 0;
+            onChange({
+              annual,
+              monthly: annual / 12,
+              perPaycheck: annual / 24
+            });
+          }}
+          className="px-3 py-2 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          placeholder="0.00"
+        />
+        <div className="px-3 py-2 bg-gray-50 rounded-lg text-right text-gray-700 font-medium">
+          {formatCurrency(value.monthly)}
+        </div>
+        <div className="px-3 py-2 bg-blue-50 rounded-lg text-right text-gray-700 font-medium">
+          {formatCurrency(value.perPaycheck)}
+        </div>
+        <input
+          type="text"
+          value={notes || ''}
+          onChange={(e) => onChange({ ...value, notes: e.target.value })}
+          className="px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          placeholder="Notes..."
+        />
+      </div>
+    );
+
+    const BudgetEditor = ({ budget, onUpdate }) => {
+      const updateField = (category, field, value) => {
+        const updated = { ...budget };
+        if (category === 'grossIncome' || category === 'taxes' || category === 'insurance') {
+          updated[category] = { ...updated[category], ...value };
+        } else {
+          updated[category][field] = { ...updated[category][field], ...value };
+        }
+        onUpdate(updated);
+      };
+
+      const totalSavings = Object.values(budget.savings).reduce((sum, s) => sum + (s.annual || 0), 0);
+      const totalExpenses = Object.values(budget.expenses).reduce((sum, e) => sum + (e.annual || 0), 0);
+      const totalTaxInsurance = (budget.taxes.annual || 0) + (budget.insurance.annual || 0);
+      const totalBudgeted = totalTaxInsurance + totalSavings + totalExpenses;
+      const remainingIncome = (budget.grossIncome.annual || 0) - totalBudgeted;
+      const savingsRate = budget.grossIncome.annual ? ((totalSavings / budget.grossIncome.annual) * 100).toFixed(1) : 0;
+
+      return (
+        <div className="space-y-6">
+          {/* Header Row */}
+          <div className="grid grid-cols-5 gap-3 pb-2 border-b-2 border-gray-300">
+            <div className="col-span-1"></div>
+            <div className="text-center font-bold text-gray-900">Annual</div>
+            <div className="text-center font-bold text-gray-900 italic">Monthly</div>
+            <div className="text-center font-bold text-blue-900 italic bg-blue-50 rounded-t-lg py-1">Per Paycheck</div>
+            <div className="text-center font-bold text-gray-900 italic">Notes</div>
+          </div>
+
+          {/* Gross Income */}
+          <div>
+            <h3 className="text-lg font-bold text-gray-900 mb-3">GROSS INCOME</h3>
+            <BudgetInput
+              label="Gross Income"
+              value={budget.grossIncome}
+              onChange={(value) => updateField('grossIncome', null, value)}
+              notes={budget.grossIncome.notes}
+            />
+          </div>
+
+          {/* Taxes + Insurance */}
+          <div>
+            <h3 className="text-lg font-bold text-gray-900 mb-3">Taxes + Insurance</h3>
+            <BudgetInput label="Taxes" value={budget.taxes} onChange={(value) => updateField('taxes', null, value)} notes={budget.taxes.notes} />
+            <BudgetInput label="Insurance" value={budget.insurance} onChange={(value) => updateField('insurance', null, value)} notes={budget.insurance.notes} />
+            <div className="grid grid-cols-5 gap-3 items-center py-3 bg-gray-100 rounded-lg px-2 mt-2 font-bold">
+              <div className="col-span-1">Total Tax + Insurance</div>
+              <div className="text-right">{formatCurrency(totalTaxInsurance)}</div>
+              <div className="text-right">{formatCurrency(totalTaxInsurance / 12)}</div>
+              <div className="text-right">{formatCurrency(totalTaxInsurance / 24)}</div>
+              <div></div>
+            </div>
+          </div>
+
+          {/* Savings */}
+          <div>
+            <h3 className="text-lg font-bold text-gray-900 mb-3">Savings</h3>
+            <BudgetInput label="401K" value={budget.savings['401k']} onChange={(value) => updateField('savings', '401k', value)} notes={budget.savings['401k'].notes} limit={budget.savings['401k'].limit} />
+            <BudgetInput label="Roth IRA" value={budget.savings.rothIRA} onChange={(value) => updateField('savings', 'rothIRA', value)} notes={budget.savings.rothIRA.notes} limit={budget.savings.rothIRA.limit} />
+            <BudgetInput label="HSA" value={budget.savings.hsa} onChange={(value) => updateField('savings', 'hsa', value)} notes={budget.savings.hsa.notes} limit={budget.savings.hsa.limit} />
+            <BudgetInput label="HYSA" value={budget.savings.hysa} onChange={(value) => updateField('savings', 'hysa', value)} notes={budget.savings.hysa.notes} />
+            <BudgetInput label="Brokerage" value={budget.savings.brokerage} onChange={(value) => updateField('savings', 'brokerage', value)} notes={budget.savings.brokerage.notes} />
+            <div className="grid grid-cols-5 gap-3 items-center py-3 bg-gray-100 rounded-lg px-2 mt-2 font-bold">
+              <div className="col-span-1">Total Savings</div>
+              <div className="text-right">{formatCurrency(totalSavings)}</div>
+              <div className="text-right">{formatCurrency(totalSavings / 12)}</div>
+              <div className="text-right">{formatCurrency(totalSavings / 24)}</div>
+              <div></div>
+            </div>
+          </div>
+
+          {/* Expenses */}
+          <div>
+            <h3 className="text-lg font-bold text-gray-900 mb-3">Expenses</h3>
+            <BudgetInput label="Rent (fixed)" value={budget.expenses.rent} onChange={(value) => updateField('expenses', 'rent', value)} notes={budget.expenses.rent.notes} />
+            <BudgetInput label="Living Expenses" value={budget.expenses.living} onChange={(value) => updateField('expenses', 'living', value)} notes={budget.expenses.living.notes} />
+            <BudgetInput label="Travel Fund" value={budget.expenses.travel} onChange={(value) => updateField('expenses', 'travel', value)} notes={budget.expenses.travel.notes} />
+            <BudgetInput label="Discretionary" value={budget.expenses.discretionary} onChange={(value) => updateField('expenses', 'discretionary', value)} notes={budget.expenses.discretionary.notes} />
+            <div className="grid grid-cols-5 gap-3 items-center py-3 bg-gray-100 rounded-lg px-2 mt-2 font-bold">
+              <div className="col-span-1">Total Expenses</div>
+              <div className="text-right">{formatCurrency(totalExpenses)}</div>
+              <div className="text-right">{formatCurrency(totalExpenses / 12)}</div>
+              <div className="text-right">{formatCurrency(totalExpenses / 24)}</div>
+              <div></div>
+            </div>
+          </div>
+
+          {/* Summary */}
+          <div className="space-y-3 pt-4 border-t-2 border-gray-300">
+            <div className="grid grid-cols-5 gap-3 items-center py-3 bg-blue-50 rounded-lg px-2 font-bold text-blue-900">
+              <div className="col-span-1">Subtotal Budgeted</div>
+              <div className="text-right">{formatCurrency(totalBudgeted)}</div>
+              <div className="text-right">{formatCurrency(totalBudgeted / 12)}</div>
+              <div className="text-right">{formatCurrency(totalBudgeted / 24)}</div>
+              <div></div>
+            </div>
+            <div className={`grid grid-cols-5 gap-3 items-center py-3 rounded-lg px-2 font-bold ${remainingIncome >= 0 ? 'bg-green-50 text-green-900' : 'bg-red-50 text-red-900'}`}>
+              <div className="col-span-1">REMAINING INCOME</div>
+              <div className="text-right">{formatCurrency(remainingIncome)}</div>
+              <div className="text-right">{formatCurrency(remainingIncome / 12)}</div>
+              <div className="text-right">{formatCurrency(remainingIncome / 24)}</div>
+              <div></div>
+            </div>
+            <div className="grid grid-cols-2 gap-6 pt-4">
+              <div className="bg-purple-50 rounded-lg p-4">
+                <div className="text-sm text-purple-700 font-medium">Savings Rate</div>
+                <div className="text-3xl font-bold text-purple-900">{savingsRate}%</div>
+              </div>
+              <div className="bg-indigo-50 rounded-lg p-4">
+                <div className="text-sm text-indigo-700 font-medium">Monthly Savings</div>
+                <div className="text-3xl font-bold text-indigo-900">{formatCurrency(totalSavings / 12)}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    const SimpleBarChart = ({ data, color }) => {
+      const maxValue = Math.max(...data.map(d => d.value));
+      
+      return (
+        <div className="space-y-3">
+          {data.map((item, idx) => (
+            <div key={idx} className="space-y-1">
+              <div className="flex justify-between text-sm">
+                <span className="font-medium text-gray-700">{item.label}</span>
+                <span className="font-bold text-gray-900">{formatCurrency(item.value)}</span>
+              </div>
+              <div className="w-full bg-gray-200 rounded-full h-6">
+                <div 
+                  className={`h-6 rounded-full ${color}`}
+                  style={{ width: `${(item.value / maxValue) * 100}%` }}
+                ></div>
+              </div>
+            </div>
+          ))}
+        </div>
+      );
+    };
+
+    const BudgetVisuals = ({ budget }) => {
+      const totalSavings = Object.values(budget.savings).reduce((sum, s) => sum + (s.annual || 0), 0);
+      const totalExpenses = Object.values(budget.expenses).reduce((sum, e) => sum + (e.annual || 0), 0);
+      const totalTaxInsurance = (budget.taxes.annual || 0) + (budget.insurance.annual || 0);
+      const totalIncome = budget.grossIncome.annual || 0;
+
+      const allocationData = [
+        { label: 'Taxes + Insurance', value: totalTaxInsurance },
+        { label: 'Savings', value: totalSavings },
+        { label: 'Expenses', value: totalExpenses }
+      ];
+
+      const expenseData = [
+        { label: 'Rent', value: budget.expenses.rent.annual },
+        { label: 'Living Expenses', value: budget.expenses.living.annual },
+        { label: 'Travel Fund', value: budget.expenses.travel.annual },
+        { label: 'Discretionary', value: budget.expenses.discretionary.annual }
+      ];
+
+      const savingsData = [
+        { label: '401K', value: budget.savings['401k'].annual },
+        { label: 'Roth IRA', value: budget.savings.rothIRA.annual },
+        { label: 'HSA', value: budget.savings.hsa.annual },
+        { label: 'HYSA', value: budget.savings.hysa.annual },
+        { label: 'Brokerage', value: budget.savings.brokerage.annual }
+      ];
+
+      return (
+        <div className="space-y-8">
+          {/* Income Allocation */}
+          <div className="bg-white border border-gray-200 rounded-lg p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-6">Income Allocation</h3>
+            <div className="grid grid-cols-2 gap-8">
+              <div>
+                <SimpleBarChart data={allocationData} color="bg-gradient-to-r from-blue-500 to-blue-600" />
+              </div>
+              <div className="space-y-3">
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                  <div className="text-sm text-red-700 font-medium">Taxes + Insurance</div>
+                  <div className="text-2xl font-bold text-red-900">{formatCurrency(totalTaxInsurance)}</div>
+                  <div className="text-xs text-red-600 mt-1">
+                    {totalIncome ? ((totalTaxInsurance / totalIncome) * 100).toFixed(1) : 0}% of income
+                  </div>
+                </div>
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <div className="text-sm text-green-700 font-medium">Total Savings</div>
+                  <div className="text-2xl font-bold text-green-900">{formatCurrency(totalSavings)}</div>
+                  <div className="text-xs text-green-600 mt-1">
+                    {totalIncome ? ((totalSavings / totalIncome) * 100).toFixed(1) : 0}% of income
+                  </div>
+                </div>
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <div className="text-sm text-blue-700 font-medium">Total Expenses</div>
+                  <div className="text-2xl font-bold text-blue-900">{formatCurrency(totalExpenses)}</div>
+                  <div className="text-xs text-blue-600 mt-1">
+                    {totalIncome ? ((totalExpenses / totalIncome) * 100).toFixed(1) : 0}% of income
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Expense Breakdown */}
+          <div className="bg-white border border-gray-200 rounded-lg p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-6">Expense Breakdown</h3>
+            <SimpleBarChart data={expenseData} color="bg-gradient-to-r from-blue-400 to-blue-500" />
+          </div>
+
+          {/* Savings Breakdown */}
+          <div className="bg-white border border-gray-200 rounded-lg p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-6">Savings Breakdown</h3>
+            <SimpleBarChart data={savingsData} color="bg-gradient-to-r from-green-400 to-green-500" />
+          </div>
+        </div>
+      );
+    };
+
+    function BudgetApp() {
+      const [budgets, setBudgets] = useState(mockBudgets);
+      const [selectedBudgetId, setSelectedBudgetId] = useState(mockBudgets[0].id);
+      const [activeTab, setActiveTab] = useState('editor');
+      const [showCreateForm, setShowCreateForm] = useState(false);
+      const [newBudgetName, setNewBudgetName] = useState('');
+
+      const selectedBudget = budgets.find(b => b.id === selectedBudgetId);
+
+      const handleCreateBudget = () => {
+        if (!newBudgetName.trim()) return;
+        const newBudget = createDefaultBudget(newBudgetName);
+        setBudgets([...budgets, newBudget]);
+        setSelectedBudgetId(newBudget.id);
+        setNewBudgetName('');
+        setShowCreateForm(false);
+      };
+
+      const handleUpdateBudget = (updatedBudget) => {
+        setBudgets(budgets.map(b => b.id === updatedBudget.id ? updatedBudget : b));
+      };
+
+      const handleDeleteBudget = (id) => {
+        if (budgets.length === 1) {
+          alert('Cannot delete the last budget');
+          return;
+        }
+        if (confirm('Are you sure you want to delete this budget?')) {
+          setBudgets(budgets.filter(b => b.id !== id));
+          if (selectedBudgetId === id) {
+            setSelectedBudgetId(budgets.find(b => b.id !== id).id);
+          }
+        }
+      };
+
+      const handleDuplicateBudget = (budget) => {
+        const duplicate = { 
+          ...JSON.parse(JSON.stringify(budget)), 
+          id: Date.now().toString(), 
+          name: `${budget.name} (Copy)`, 
+          createdAt: new Date().toISOString() 
+        };
+        setBudgets([...budgets, duplicate]);
+        setSelectedBudgetId(duplicate.id);
+      };
+
+      return (
+        <div className="min-h-screen bg-gray-50">
+          <div className="bg-white border-b border-gray-200">
+            <div className="max-w-7xl mx-auto px-6 py-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h1 className="text-3xl font-bold text-gray-900">Annual Budget Planner</h1>
+                  <p className="text-gray-600 mt-1">Plan your finances across annual, monthly, and per-paycheck views</p>
+                </div>
+                <button
+                  onClick={() => setShowCreateForm(true)}
+                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
+                >
+                  <Icon name="plus" size={20} />
+                  New Budget
+                </button>
+              </div>
+
+              <div className="flex gap-2 mt-6 overflow-x-auto pb-2">
+                {budgets.map(budget => (
+                  <div key={budget.id} className="relative group">
+                    <button
+                      onClick={() => setSelectedBudgetId(budget.id)}
+                      className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap ${
+                        selectedBudgetId === budget.id
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'
+                      }`}
+                    >
+                      {budget.name}
+                    </button>
+                    {selectedBudgetId === budget.id && (
+                      <div className="absolute top-full left-0 mt-2 bg-white border border-gray-200 rounded-lg shadow-lg p-2 flex gap-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={() => handleDuplicateBudget(budget)}
+                          className="p-2 hover:bg-gray-100 rounded"
+                          title="Duplicate"
+                        >
+                          <Icon name="copy" size={16} />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteBudget(budget.id)}
+                          className="p-2 hover:bg-red-50 text-red-600 rounded"
+                          title="Delete"
+                        >
+                          <Icon name="trash" size={16} />
+                        >
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="max-w-7xl mx-auto px-6 py-4">
+            <div className="flex gap-2">
+              <button
+                onClick={() => setActiveTab('editor')}
+                className={`px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 ${
+                  activeTab === 'editor' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'
+                }`}
+              >
+                <Icon name="calculator" size={16} />
+                Budget Editor
+              </button>
+              <button
+                onClick={() => setActiveTab('visuals')}
+                className={`px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 ${
+                  activeTab === 'visuals' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'
+                }`}
+              >
+                <Icon name="chart" size={16} />
+                Visualizations
+              </button>
+            </div>
+          </div>
+
+          <div className="max-w-7xl mx-auto px-6 pb-12">
+            <div className="bg-white border border-gray-200 rounded-lg p-6">
+              {activeTab === 'editor' && selectedBudget && (
+                <BudgetEditor budget={selectedBudget} onUpdate={handleUpdateBudget} />
+              )}
+              {activeTab === 'visuals' && selectedBudget && (
+                <BudgetVisuals budget={selectedBudget} />
+              )}
+            </div>
+          </div>
+
+          {showCreateForm && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50" onClick={() => setShowCreateForm(false)}>
+              <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
+                <h2 className="text-2xl font-bold text-gray-900 mb-4">Create New Budget</h2>
+                <input
+                  type="text"
+                  value={newBudgetName}
+                  onChange={(e) => setNewBudgetName(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && handleCreateBudget()}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent mb-4"
+                  placeholder="e.g., Aggressive Savings Plan"
+                  autoFocus
+                />
+                <div className="flex justify-end gap-3">
+                  <button
+                    onClick={() => setShowCreateForm(false)}
+                    className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleCreateBudget}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                  >
+                    Create Budget
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<BudgetApp />);
+  </script>
+</body>
+</html>

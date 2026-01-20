@@ -205,11 +205,25 @@
       return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
     };
 
-    const BudgetInput = ({ label, value, onChange, notes, limit }) => (
+    // Round to nearest cent
+    const roundToCents = (value) => Math.round(value * 100) / 100;
+
+    const BudgetInput = ({ label, value, onChange, notes, limit, onDelete, isCustom }) => (
       <div className="grid grid-cols-5 gap-3 items-center py-2 border-b border-gray-100">
-        <div className="col-span-1 text-sm font-medium text-gray-700">
-          {label}
-          {limit && <span className="text-xs text-gray-500 block">Limit: {formatCurrency(limit)}</span>}
+        <div className="col-span-1 text-sm font-medium text-gray-700 flex items-center gap-2">
+          {isCustom && onDelete && (
+            <button
+              onClick={onDelete}
+              className="text-red-400 hover:text-red-600 p-1"
+              title="Remove"
+            >
+              <Icon name="trash" size={14} />
+            </button>
+          )}
+          <div>
+            {label}
+            {limit && <span className="text-xs text-gray-500 block">Limit: {formatCurrency(limit)}</span>}
+          </div>
         </div>
         <input
           type="number"
@@ -218,8 +232,8 @@
             const annual = parseFloat(e.target.value) || 0;
             onChange({
               annual,
-              monthly: annual / 12,
-              perPaycheck: annual / 24
+              monthly: roundToCents(annual / 12),
+              perPaycheck: roundToCents(annual / 24)
             });
           }}
           className="px-3 py-2 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -231,9 +245,9 @@
           onChange={(e) => {
             const monthly = parseFloat(e.target.value) || 0;
             onChange({
-              annual: monthly * 12,
+              annual: roundToCents(monthly * 12),
               monthly,
-              perPaycheck: monthly / 2
+              perPaycheck: roundToCents(monthly / 2)
             });
           }}
           className="px-3 py-2 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-gray-50"
@@ -245,8 +259,8 @@
           onChange={(e) => {
             const perPaycheck = parseFloat(e.target.value) || 0;
             onChange({
-              annual: perPaycheck * 24,
-              monthly: perPaycheck * 2,
+              annual: roundToCents(perPaycheck * 24),
+              monthly: roundToCents(perPaycheck * 2),
               perPaycheck
             });
           }}
@@ -263,7 +277,31 @@
       </div>
     );
 
+    // Default keys that cannot be deleted
+    const DEFAULT_SAVINGS_KEYS = ['401k', 'rothIRA', 'hsa', 'hysa', 'brokerage'];
+    const DEFAULT_EXPENSE_KEYS = ['rent', 'living', 'travel', 'discretionary'];
+
+    // Labels for default keys
+    const SAVINGS_LABELS = {
+      '401k': '401K',
+      'rothIRA': 'Roth IRA',
+      'hsa': 'HSA',
+      'hysa': 'HYSA',
+      'brokerage': 'Brokerage'
+    };
+    const EXPENSE_LABELS = {
+      'rent': 'Rent (fixed)',
+      'living': 'Living Expenses',
+      'travel': 'Travel Fund',
+      'discretionary': 'Discretionary'
+    };
+
     const BudgetEditor = ({ budget, onUpdate }) => {
+      const [newSavingsName, setNewSavingsName] = useState('');
+      const [newExpenseName, setNewExpenseName] = useState('');
+      const [showAddSavings, setShowAddSavings] = useState(false);
+      const [showAddExpense, setShowAddExpense] = useState(false);
+
       const updateField = (category, field, value) => {
         const updated = { ...budget };
         if (category === 'grossIncome' || category === 'taxes' || category === 'insurance') {
@@ -271,6 +309,40 @@
         } else {
           updated[category][field] = { ...updated[category][field], ...value };
         }
+        onUpdate(updated);
+      };
+
+      const addSavingsItem = () => {
+        if (!newSavingsName.trim()) return;
+        const key = newSavingsName.toLowerCase().replace(/\s+/g, '_');
+        const updated = { ...budget };
+        updated.savings = {
+          ...updated.savings,
+          [key]: { annual: 0, monthly: 0, perPaycheck: 0, notes: '', label: newSavingsName }
+        };
+        onUpdate(updated);
+        setNewSavingsName('');
+        setShowAddSavings(false);
+      };
+
+      const addExpenseItem = () => {
+        if (!newExpenseName.trim()) return;
+        const key = newExpenseName.toLowerCase().replace(/\s+/g, '_');
+        const updated = { ...budget };
+        updated.expenses = {
+          ...updated.expenses,
+          [key]: { annual: 0, monthly: 0, perPaycheck: 0, notes: '', label: newExpenseName }
+        };
+        onUpdate(updated);
+        setNewExpenseName('');
+        setShowAddExpense(false);
+      };
+
+      const removeItem = (category, key) => {
+        const updated = { ...budget };
+        const newCategory = { ...updated[category] };
+        delete newCategory[key];
+        updated[category] = newCategory;
         onUpdate(updated);
       };
 
@@ -311,41 +383,123 @@
             <div className="grid grid-cols-5 gap-3 items-center py-3 bg-gray-100 rounded-lg px-2 mt-2 font-bold">
               <div className="col-span-1">Total Tax + Insurance</div>
               <div className="text-right">{formatCurrency(totalTaxInsurance)}</div>
-              <div className="text-right">{formatCurrency(totalTaxInsurance / 12)}</div>
-              <div className="text-right">{formatCurrency(totalTaxInsurance / 24)}</div>
+              <div className="text-right">{formatCurrency(roundToCents(totalTaxInsurance / 12))}</div>
+              <div className="text-right">{formatCurrency(roundToCents(totalTaxInsurance / 24))}</div>
               <div></div>
             </div>
           </div>
 
           {/* Savings */}
           <div>
-            <h3 className="text-lg font-bold text-gray-900 mb-3">Savings</h3>
-            <BudgetInput label="401K" value={budget.savings['401k']} onChange={(value) => updateField('savings', '401k', value)} notes={budget.savings['401k'].notes} limit={budget.savings['401k'].limit} />
-            <BudgetInput label="Roth IRA" value={budget.savings.rothIRA} onChange={(value) => updateField('savings', 'rothIRA', value)} notes={budget.savings.rothIRA.notes} limit={budget.savings.rothIRA.limit} />
-            <BudgetInput label="HSA" value={budget.savings.hsa} onChange={(value) => updateField('savings', 'hsa', value)} notes={budget.savings.hsa.notes} limit={budget.savings.hsa.limit} />
-            <BudgetInput label="HYSA" value={budget.savings.hysa} onChange={(value) => updateField('savings', 'hysa', value)} notes={budget.savings.hysa.notes} />
-            <BudgetInput label="Brokerage" value={budget.savings.brokerage} onChange={(value) => updateField('savings', 'brokerage', value)} notes={budget.savings.brokerage.notes} />
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-lg font-bold text-gray-900">Savings</h3>
+              <button
+                onClick={() => setShowAddSavings(true)}
+                className="flex items-center gap-1 px-3 py-1 text-sm text-blue-600 hover:bg-blue-50 rounded-lg"
+              >
+                <Icon name="plus" size={16} />
+                Add Row
+              </button>
+            </div>
+            {Object.entries(budget.savings).map(([key, data]) => (
+              <BudgetInput
+                key={key}
+                label={SAVINGS_LABELS[key] || data.label || key}
+                value={data}
+                onChange={(value) => updateField('savings', key, value)}
+                notes={data.notes}
+                limit={data.limit}
+                isCustom={!DEFAULT_SAVINGS_KEYS.includes(key)}
+                onDelete={() => removeItem('savings', key)}
+              />
+            ))}
+            {showAddSavings && (
+              <div className="flex gap-2 py-2 border-b border-gray-100">
+                <input
+                  type="text"
+                  value={newSavingsName}
+                  onChange={(e) => setNewSavingsName(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && addSavingsItem()}
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Enter savings category name..."
+                  autoFocus
+                />
+                <button
+                  onClick={addSavingsItem}
+                  className="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700"
+                >
+                  Add
+                </button>
+                <button
+                  onClick={() => { setShowAddSavings(false); setNewSavingsName(''); }}
+                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
             <div className="grid grid-cols-5 gap-3 items-center py-3 bg-gray-100 rounded-lg px-2 mt-2 font-bold">
               <div className="col-span-1">Total Savings</div>
               <div className="text-right">{formatCurrency(totalSavings)}</div>
-              <div className="text-right">{formatCurrency(totalSavings / 12)}</div>
-              <div className="text-right">{formatCurrency(totalSavings / 24)}</div>
+              <div className="text-right">{formatCurrency(roundToCents(totalSavings / 12))}</div>
+              <div className="text-right">{formatCurrency(roundToCents(totalSavings / 24))}</div>
               <div></div>
             </div>
           </div>
 
           {/* Expenses */}
           <div>
-            <h3 className="text-lg font-bold text-gray-900 mb-3">Expenses</h3>
-            <BudgetInput label="Rent (fixed)" value={budget.expenses.rent} onChange={(value) => updateField('expenses', 'rent', value)} notes={budget.expenses.rent.notes} />
-            <BudgetInput label="Living Expenses" value={budget.expenses.living} onChange={(value) => updateField('expenses', 'living', value)} notes={budget.expenses.living.notes} />
-            <BudgetInput label="Travel Fund" value={budget.expenses.travel} onChange={(value) => updateField('expenses', 'travel', value)} notes={budget.expenses.travel.notes} />
-            <BudgetInput label="Discretionary" value={budget.expenses.discretionary} onChange={(value) => updateField('expenses', 'discretionary', value)} notes={budget.expenses.discretionary.notes} />
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-lg font-bold text-gray-900">Expenses</h3>
+              <button
+                onClick={() => setShowAddExpense(true)}
+                className="flex items-center gap-1 px-3 py-1 text-sm text-blue-600 hover:bg-blue-50 rounded-lg"
+              >
+                <Icon name="plus" size={16} />
+                Add Row
+              </button>
+            </div>
+            {Object.entries(budget.expenses).map(([key, data]) => (
+              <BudgetInput
+                key={key}
+                label={EXPENSE_LABELS[key] || data.label || key}
+                value={data}
+                onChange={(value) => updateField('expenses', key, value)}
+                notes={data.notes}
+                isCustom={!DEFAULT_EXPENSE_KEYS.includes(key)}
+                onDelete={() => removeItem('expenses', key)}
+              />
+            ))}
+            {showAddExpense && (
+              <div className="flex gap-2 py-2 border-b border-gray-100">
+                <input
+                  type="text"
+                  value={newExpenseName}
+                  onChange={(e) => setNewExpenseName(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && addExpenseItem()}
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Enter expense category name..."
+                  autoFocus
+                />
+                <button
+                  onClick={addExpenseItem}
+                  className="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700"
+                >
+                  Add
+                </button>
+                <button
+                  onClick={() => { setShowAddExpense(false); setNewExpenseName(''); }}
+                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
             <div className="grid grid-cols-5 gap-3 items-center py-3 bg-gray-100 rounded-lg px-2 mt-2 font-bold">
               <div className="col-span-1">Total Expenses</div>
               <div className="text-right">{formatCurrency(totalExpenses)}</div>
-              <div className="text-right">{formatCurrency(totalExpenses / 12)}</div>
-              <div className="text-right">{formatCurrency(totalExpenses / 24)}</div>
+              <div className="text-right">{formatCurrency(roundToCents(totalExpenses / 12))}</div>
+              <div className="text-right">{formatCurrency(roundToCents(totalExpenses / 24))}</div>
               <div></div>
             </div>
           </div>
@@ -355,15 +509,15 @@
             <div className="grid grid-cols-5 gap-3 items-center py-3 bg-blue-50 rounded-lg px-2 font-bold text-blue-900">
               <div className="col-span-1">Subtotal Budgeted</div>
               <div className="text-right">{formatCurrency(totalBudgeted)}</div>
-              <div className="text-right">{formatCurrency(totalBudgeted / 12)}</div>
-              <div className="text-right">{formatCurrency(totalBudgeted / 24)}</div>
+              <div className="text-right">{formatCurrency(roundToCents(totalBudgeted / 12))}</div>
+              <div className="text-right">{formatCurrency(roundToCents(totalBudgeted / 24))}</div>
               <div></div>
             </div>
             <div className={`grid grid-cols-5 gap-3 items-center py-3 rounded-lg px-2 font-bold ${remainingIncome >= 0 ? 'bg-green-50 text-green-900' : 'bg-red-50 text-red-900'}`}>
               <div className="col-span-1">REMAINING INCOME</div>
               <div className="text-right">{formatCurrency(remainingIncome)}</div>
-              <div className="text-right">{formatCurrency(remainingIncome / 12)}</div>
-              <div className="text-right">{formatCurrency(remainingIncome / 24)}</div>
+              <div className="text-right">{formatCurrency(roundToCents(remainingIncome / 12))}</div>
+              <div className="text-right">{formatCurrency(roundToCents(remainingIncome / 24))}</div>
               <div></div>
             </div>
             <div className="grid grid-cols-2 gap-6 pt-4">
@@ -373,7 +527,7 @@
               </div>
               <div className="bg-indigo-50 rounded-lg p-4">
                 <div className="text-sm text-indigo-700 font-medium">Monthly Savings</div>
-                <div className="text-3xl font-bold text-indigo-900">{formatCurrency(totalSavings / 12)}</div>
+                <div className="text-3xl font-bold text-indigo-900">{formatCurrency(roundToCents(totalSavings / 12))}</div>
               </div>
             </div>
           </div>
